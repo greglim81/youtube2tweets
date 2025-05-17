@@ -112,7 +112,7 @@ export default function Home() {
       <div className="max-w-4xl mx-auto">
         <div className="flex items-center justify-between mb-8">
           <h1 className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-blue-400 to-purple-500">
-            Greg's YouTube Transcriber
+            Greg&apos;s YouTube Transcriber
           </h1>
           <div className="flex items-center gap-4">
             <Link

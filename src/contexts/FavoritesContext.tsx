@@ -19,6 +19,12 @@ interface FavoritesContextType {
   isFavorite: (id: string) => boolean;
 }
 
+interface FirebaseFavoriteData {
+  text: string;
+  timestamp: number;
+  videoUrl?: string;
+}
+
 const FavoritesContext = createContext<FavoritesContextType>({} as FavoritesContextType);
 
 export function FavoritesProvider({ children }: { children: React.ReactNode }) {
@@ -36,9 +42,9 @@ export function FavoritesProvider({ children }: { children: React.ReactNode }) {
     onValue(favoritesRef, (snapshot) => {
       const data = snapshot.val();
       if (data) {
-        const favoritesArray = Object.entries(data).map(([id, tweet]: [string, any]) => ({
+        const favoritesArray = Object.entries(data).map(([id, tweet]) => ({
           id,
-          ...tweet,
+          ...(tweet as FirebaseFavoriteData),
         }));
         setFavorites(favoritesArray);
       } else {
@@ -57,7 +63,7 @@ export function FavoritesProvider({ children }: { children: React.ReactNode }) {
       return;
     }
     const newFavoriteRef = ref(database, `users/${user.uid}/favorites/${tweet.id}`);
-    const data: any = {
+    const data: FirebaseFavoriteData = {
       text: tweet.text,
       timestamp: Date.now(),
     };

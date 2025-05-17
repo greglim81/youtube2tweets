@@ -62,7 +62,7 @@ export default function FavoritesPage() {
         
         {favorites.length === 0 ? (
           <div className="text-center py-12">
-            <p className="text-gray-400 text-lg">You haven't favorited any tweets yet.</p>
+            <p className="text-gray-400 text-lg">You haven&apos;t favorited any tweets yet.</p>
             <Link href="/" className="text-blue-400 hover:text-blue-300 mt-4 inline-block">
               Go back to home
             </Link>
