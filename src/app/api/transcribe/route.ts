@@ -6,6 +6,35 @@ const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
+interface TranscriptSegment {
+  text: string;
+  duration: number;
+  offset: number;
+}
+
+async function fetchTranscriptWithRetry(videoId: string, maxRetries = 3): Promise<TranscriptSegment[]> {
+  let lastError;
+  
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      const transcript = await YoutubeTranscript.fetchTranscript(videoId, {
+        lang: 'en'
+      });
+      return transcript;
+    } catch (error) {
+      lastError = error;
+      console.log(`Attempt ${attempt} failed:`, error);
+      
+      if (attempt < maxRetries) {
+        // Wait for 1 second before retrying
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    }
+  }
+  
+  throw lastError;
+}
+
 export async function POST(request: Request) {
   try {
     const { url } = await request.json();
@@ -26,13 +55,32 @@ export async function POST(request: Request) {
       );
     }
 
-    // Fetch transcript
-    const transcript = await YoutubeTranscript.fetchTranscript(videoId);
+    // Fetch transcript with retry logic
+    let transcript;
+    try {
+      transcript = await fetchTranscriptWithRetry(videoId);
+    } catch (error) {
+      console.error('Failed to fetch transcript after retries:', error);
+      return NextResponse.json(
+        { 
+          message: 'Unable to fetch transcript. This video might not have captions available or they might be disabled.',
+          error: error instanceof Error ? error.message : 'Unknown error'
+        },
+        { status: 400 }
+      );
+    }
     
     // Combine all transcript segments into one text
     const rawTranscript = transcript
-      .map((segment) => segment.text)
+      .map((segment: TranscriptSegment) => segment.text)
       .join(' ');
+
+    if (!rawTranscript.trim()) {
+      return NextResponse.json(
+        { message: 'No transcript content found for this video' },
+        { status: 400 }
+      );
+    }
 
     // Use OpenAI to improve readability
     const completion = await openai.chat.completions.create({
@@ -56,7 +104,10 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error('Transcription error:', error);
     return NextResponse.json(
-      { message: 'Failed to fetch transcript' },
+      { 
+        message: 'Failed to process transcript',
+        error: error instanceof Error ? error.message : 'Unknown error'
+      },
       { status: 500 }
     );
   }
