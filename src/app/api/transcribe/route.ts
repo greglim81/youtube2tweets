@@ -1,26 +1,58 @@
 import { NextResponse } from 'next/server';
-import { YoutubeTranscript } from 'youtube-transcript';
 import OpenAI from 'openai';
+import axios from 'axios';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
 
-interface TranscriptSegment {
-  text: string;
-  duration: number;
-  offset: number;
+interface CaptionTrack {
+  baseUrl: string;
+  name: { simpleText: string };
+  languageCode: string;
 }
 
-async function fetchTranscriptWithRetry(videoId: string, maxRetries = 3): Promise<TranscriptSegment[]> {
+async function getCaptionsUrl(videoId: string): Promise<string | null> {
+  try {
+    const response = await axios.get(`https://www.youtube.com/watch?v=${videoId}`);
+    const html = response.data;
+    
+    // Extract caption tracks from the page
+    const captionTracksMatch = html.match(/"captionTracks":(\[.*?\])/);
+    if (!captionTracksMatch) return null;
+    
+    const captionTracks: CaptionTrack[] = JSON.parse(captionTracksMatch[1]);
+    const englishTrack = captionTracks.find(track => 
+      track.languageCode === 'en' || track.name.simpleText.toLowerCase().includes('english')
+    );
+    
+    return englishTrack?.baseUrl || null;
+  } catch (error) {
+    console.error('Error fetching captions URL:', error);
+    return null;
+  }
+}
+
+async function fetchTranscriptWithRetry(videoId: string, maxRetries = 3): Promise<string> {
   let lastError;
   
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      const transcript = await YoutubeTranscript.fetchTranscript(videoId, {
-        lang: 'en'
-      });
-      return transcript;
+      const captionsUrl = await getCaptionsUrl(videoId);
+      if (!captionsUrl) {
+        throw new Error('No captions available for this video');
+      }
+
+      const response = await axios.get(captionsUrl);
+      const xml = response.data;
+      
+      // Extract text from XML
+      const textContent = xml
+        .replace(/<[^>]+>/g, ' ') // Remove XML tags
+        .replace(/\s+/g, ' ')     // Normalize whitespace
+        .trim();
+      
+      return textContent;
     } catch (error) {
       lastError = error;
       console.log(`Attempt ${attempt} failed:`, error);
@@ -56,9 +88,9 @@ export async function POST(request: Request) {
     }
 
     // Fetch transcript with retry logic
-    let transcript;
+    let rawTranscript;
     try {
-      transcript = await fetchTranscriptWithRetry(videoId);
+      rawTranscript = await fetchTranscriptWithRetry(videoId);
     } catch (error) {
       console.error('Failed to fetch transcript after retries:', error);
       return NextResponse.json(
@@ -69,11 +101,6 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
-    
-    // Combine all transcript segments into one text
-    const rawTranscript = transcript
-      .map((segment: TranscriptSegment) => segment.text)
-      .join(' ');
 
     if (!rawTranscript.trim()) {
       return NextResponse.json(
