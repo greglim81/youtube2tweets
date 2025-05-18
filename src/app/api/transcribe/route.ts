@@ -8,6 +8,8 @@ const openai = new OpenAI({
 
 const RAPIDAPI_KEY = process.env.RAPIDAPI_KEY;
 
+type TranscriptSegment = { text: string };
+
 async function fetchTranscript(videoId: string): Promise<string> {
   try {
     if (!RAPIDAPI_KEY) {
@@ -30,8 +32,8 @@ async function fetchTranscript(videoId: string): Promise<string> {
     }
 
     // Combine all transcript segments into a single string
-    const transcript = response.data.transcript
-      .map((segment: any) => segment.text)
+    const transcript = (response.data.transcript as TranscriptSegment[])
+      .map((segment) => segment.text)
       .join(' ')
       .replace(/\s+/g, ' ')
       .trim();
